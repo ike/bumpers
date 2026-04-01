@@ -103,34 +103,33 @@ function M.start(system_prompt, user_prompt, selection)
   
   local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, start_row, start_col, {})
 
+  -- Capture whether we successfully deleted the text.
+  -- The extmark tracks exactly where we need to put the new text.
+  if not extmark_id then
+    vim.notify("bumpers: Failed to create insertion extmark.", vim.log.levels.ERROR)
+    return
+  end
+
   local function insert_text(text)
-    if debug_chunks then
-      vim.notify("CHUNK: " .. vim.inspect(text), vim.log.levels.INFO)
-    end
-    
     local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmark_id, {})
-    if not mark or #mark == 0 then return end
+    if not mark or #mark == 0 then 
+      vim.notify("bumpers text insert error: extmark not found", vim.log.levels.ERROR)
+      return 
+    end
     
     local r = mark[1]
     local c = mark[2]
     
-    -- In vim.api.nvim_buf_set_text, if you are just appending without newlines,
-    -- it expects { "text" }. If text contains newlines, you must split it.
-    -- vim.split(text, "\n") returns { "line1", "line2", "" } if text ends with \n
     local new_lines = vim.split(text, "\n", { plain = true })
     
-    -- Crucial: Join this edit to the previous one in the undo tree
     pcall(vim.cmd, "undojoin")
     
-    -- Using nvim_buf_set_text to insert text exactly at cursor position.
-    -- r, c is start, r, c is end (meaning insert at pos)
     local ok, err = pcall(vim.api.nvim_buf_set_text, bufnr, r, c, r, c, new_lines)
     if not ok then
-      vim.notify("bumpers text insert error: " .. tostring(err), vim.log.levels.ERROR)
+      vim.notify("bumpers text insert error: " .. tostring(err) .. " at pos " .. tostring(r) .. ":" .. tostring(c), vim.log.levels.ERROR)
       return
     end
     
-    -- Update extmark to the very end of the newly inserted chunk
     local new_r = r + #new_lines - 1
     local new_c = (#new_lines == 1) and (c + string.len(new_lines[1])) or string.len(new_lines[#new_lines])
     
@@ -160,14 +159,13 @@ function M.start(system_prompt, user_prompt, selection)
     headers = headers_dict,
     body = req.body,
     callback = vim.schedule_wrap(function(res)
-      vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
-      
       if res.status < 200 or res.status >= 300 then
         local err_msg = "bumpers: Error " .. res.status
         if res.body and res.body ~= "" then
           err_msg = err_msg .. " - " .. vim.inspect(res.body)
         end
         vim.notify(err_msg, vim.log.levels.ERROR)
+        vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
         return
       end
 
@@ -187,8 +185,13 @@ function M.start(system_prompt, user_prompt, selection)
         end
         
         if full_text ~= "" then
+          -- Run insertion logic exactly once
           insert_text(full_text)
+        else
+          vim.notify("bumpers: No text extracted from LLM response body.", vim.log.levels.WARN)
         end
+      else
+        vim.notify("bumpers: No body payload returned from LLM.", vim.log.levels.WARN)
       end
 
       vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
