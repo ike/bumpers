@@ -94,6 +94,24 @@ function M.start(system_prompt, user_prompt, selection)
   local end_row = selection.end_row - 1
   local end_col = selection.end_col
 
+  -- Prepare logging context
+  local log_dir = vim.fn.stdpath("data") .. "/bumpers/logs"
+  if vim.fn.isdirectory(log_dir) == 0 then
+    vim.fn.mkdir(log_dir, "p")
+  end
+  local log_file = log_dir .. "/bump_" .. os.date("%Y%m%d_%H%M%S") .. ".log"
+  local log_content = {
+    "--- BUMP REQUEST ---",
+    "Time: " .. os.date("%Y-%m-%d %H:%M:%S"),
+    "Model: " .. opts.model,
+    "Provider: " .. opts.provider,
+    "\n=== SYSTEM PROMPT ===",
+    system_prompt,
+    "\n=== USER PROMPT ===",
+    user_prompt,
+    "\n=== RESPONSE ===",
+  }
+
   -- Prepare insertion mark using extmarks
   local ns_id = vim.api.nvim_create_namespace("bumpers_stream")
   
@@ -185,6 +203,10 @@ function M.start(system_prompt, user_prompt, selection)
         end
         
         if full_text ~= "" then
+          -- Write to log
+          table.insert(log_content, full_text)
+          vim.fn.writefile(vim.split(table.concat(log_content, "\n"), "\n", {plain=true}), log_file)
+          
           -- Run insertion logic exactly once
           insert_text(full_text)
         else
