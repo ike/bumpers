@@ -4,36 +4,16 @@ local config = require("bumpers.config")
 local M = {}
 
 ---Buffers and parses SSE lines from raw chunk stream
+-- Note: plenary.curl stream callback receives data already split into lines without \n
 local function make_sse_parser(provider_module, callback)
-  local buffer = ""
-  return function(err, chunk)
-    if chunk then
-      buffer = buffer .. chunk
-      
-      -- We will loop and process complete lines
-      while true do
-        local newline_pos = buffer:find("\n")
-        if not newline_pos then
-          break
-        end
-        
-        -- Extract the full line (excluding the newline itself)
-        local line = buffer:sub(1, newline_pos - 1)
-        
-        -- Remove this line from the buffer
-        buffer = buffer:sub(newline_pos + 1)
-        
-        -- Strip any trailing carriage return just in case
-        line = line:gsub("\r$", "")
-        
-        if line ~= "" then
-          local text = provider_module.parse_sse(line)
-          if text and text ~= "" then
-            vim.schedule(function()
-              callback(text)
-            end)
-          end
-        end
+  return function(err, line)
+    if err then return end
+    if line and line ~= "" then
+      local text = provider_module.parse_sse(line)
+      if text and text ~= "" then
+        vim.schedule(function()
+          callback(text)
+        end)
       end
     end
   end
