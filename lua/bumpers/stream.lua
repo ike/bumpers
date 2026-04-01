@@ -14,18 +14,13 @@ local function make_sse_parser(provider_module, callback, debug_chunks)
       return 
     end
     
-    if debug_chunks then
-      vim.notify("RAW LINE: " .. vim.inspect(line), vim.log.levels.INFO)
-    end
-    
-    if line and line ~= "" then
-      local text = provider_module.parse_sse(line)
-      if text and text ~= "" then
-        vim.schedule(function()
-          callback(text)
-        end)
-      end
-    end
+    -- In plenary.curl (which uses plenary.job), the streaming callback is fundamentally broken
+    -- for incomplete lines or JSON payloads spanning multiple lines because it silently buffers
+    -- and mangles newlines internally. But the `FULL RES BODY` always holds the complete
+    -- raw HTTP response body when the curl job exits!
+    --
+    -- We are removing the broken live SSE parsing and replacing it with a full-body parse
+    -- at the end of the request.
   end
 end
 
@@ -78,7 +73,7 @@ function M.start(system_prompt, user_prompt, selection)
   end
 
   -- Enable debug mode globally to log chunks if we are failing silently
-  local debug_chunks = true
+  local debug_chunks = false
 
   local req = provider_module.build_request({
     api_key = api_key_val,
@@ -158,10 +153,12 @@ function M.start(system_prompt, user_prompt, selection)
 
   vim.notify("bumpers: Requesting " .. opts.provider .. "...", vim.log.levels.INFO)
 
+  -- We will not use the streaming callback because Plenary's job handler aggressively
+  -- buffers and destroys newline sequences inside SSE payloads making live parsing impossible.
+  -- Instead, we let curl download the entire response body and parse it exactly once.
   curl.post(req.url, {
     headers = headers_dict,
     body = req.body,
-    stream = parser,
     callback = vim.schedule_wrap(function(res)
       vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
       
@@ -171,12 +168,30 @@ function M.start(system_prompt, user_prompt, selection)
           err_msg = err_msg .. " - " .. vim.inspect(res.body)
         end
         vim.notify(err_msg, vim.log.levels.ERROR)
-      else
-        if debug_chunks then
-          vim.notify("FULL RES BODY: " .. vim.inspect(res.body), vim.log.levels.INFO)
-        end
-        vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
+        return
       end
+
+      -- The complete SSE payload is perfectly preserved in res.body
+      if res.body and type(res.body) == "string" then
+        local full_text = ""
+        -- Now we can safely split on exactly \n and parse every line
+        for line in res.body:gmatch("([^\n]*)\n?") do
+          if line ~= "" then
+            -- Remove trailing carriage return
+            line = line:gsub("\r$", "")
+            local parsed = provider_module.parse_sse(line)
+            if parsed then
+              full_text = full_text .. parsed
+            end
+          end
+        end
+        
+        if full_text ~= "" then
+          insert_text(full_text)
+        end
+      end
+
+      vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
     end)
   })
 end
