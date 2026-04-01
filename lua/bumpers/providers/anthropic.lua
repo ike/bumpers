@@ -8,12 +8,14 @@ function M.build_request(opts)
   }
 
   local payload = {
+    -- Important: Claude 3.7 models are named `claude-3-7-sonnet-20250219`
+    -- The user will pass this in through opts.model
     model = opts.model,
     system = opts.system_prompt,
     messages = {
       { role = "user", content = opts.user_prompt },
     },
-    max_tokens = 4096,
+    max_tokens = 8192, -- increased max tokens for 3.7
     stream = true,
   }
 
