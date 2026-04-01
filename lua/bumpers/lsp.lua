@@ -95,6 +95,11 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
       hover_capable = true
       break
     end
+    -- Fallback for older Neovim versions where server_capabilities might be checked directly
+    if client.server_capabilities and client.server_capabilities.hoverProvider then
+      hover_capable = true
+      break
+    end
   end
   
   if not hover_capable then
@@ -112,10 +117,11 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
       position = { line = token.row - 1, character = token.col - 1 }
     }
     
-    local results, err = vim.lsp.buf_request_sync(bufnr, 'textDocument/hover', params, 1000)
+    local ok, results, err = pcall(vim.lsp.buf_request_sync, bufnr, 'textDocument/hover', params, 1000)
     
-    if err then
-      -- If there is a fatal RPC error (e.g. timeout), abort further queries
+    if not ok or err then
+      -- If there is a fatal RPC error (e.g. timeout) or a plugin error, abort further queries
+      -- In Neovim 0.12, if no client supports it, buf_request_sync itself throws an error, so pcall catches it
       break
     end
     
