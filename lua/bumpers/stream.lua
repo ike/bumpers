@@ -51,14 +51,25 @@ end
 function M.start(system_prompt, user_prompt, selection)
   local opts = config.get()
   
-  -- Try to get the API key from config, fallback to os.getenv at runtime
+  -- The API key can be explicitly provided as a string in opts.api_keys, 
+  -- or we dynamically fallback to the default env var names if omitted.
   local api_key = opts.api_keys and opts.api_keys[opts.provider]
+  
+  -- If it's still empty, it might be that the user provided an empty string or it's not set.
+  -- But if the user provided a *different* env var name in their config via os.getenv("CUSTOM_NAME"),
+  -- it should have been captured during setup. If not, fallback to standard names.
   if not api_key or api_key == "" then
     if opts.provider == "anthropic" then
       api_key = os.getenv("ANTHROPIC_API_KEY")
     elseif opts.provider == "gemini" then
       api_key = os.getenv("GEMINI_API_KEY")
     end
+  end
+
+  -- We need to evaluate the config explicitly if the user passed a function 
+  -- or string that resolves to the key.
+  if type(api_key) == "function" then
+    api_key = api_key()
   end
 
   if not api_key or api_key == "" then

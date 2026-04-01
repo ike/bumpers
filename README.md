@@ -32,9 +32,12 @@ vim.pack.add({
       require("bumpers").setup({
         provider = "anthropic",
         model = "claude-opus-4-6", 
+        
+        -- You can provide the key directly as a string, or use a function to defer evaluation
+        -- so that custom environment variables are read at execution time.
         api_keys = {
-          anthropic = os.getenv("ANTHROPIC_API_KEY"),
-          gemini = os.getenv("GEMINI_API_KEY"),
+          anthropic = function() return os.getenv("MY_CUSTOM_ANTHROPIC_KEY") end,
+          gemini = function() return os.getenv("GEMINI_API_KEY") end,
         },
         lsp_timeout_ms = 1000,
       })
