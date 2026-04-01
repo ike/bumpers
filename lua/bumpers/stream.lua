@@ -6,20 +6,23 @@ local M = {}
 ---Buffers and parses SSE lines from raw chunk stream
 local function make_sse_parser(provider_module, callback)
   local buffer = ""
-  return function(_, chunk)
+  return function(err, chunk)
     if chunk then
       buffer = buffer .. chunk
       local lines = {}
-      for line in buffer:gmatch("([^\r\n]+)\r?\n") do
-        table.insert(lines, line)
+      
+      -- Look for complete lines ending in \n
+      -- Anthropic sends "event: ...\ndata: ...\n\n"
+      for line in buffer:gmatch("([^\n]*)\n") do
+        if line and line ~= "" then
+          table.insert(lines, line)
+        end
       end
       
       -- Keep the incomplete line in the buffer
-      local last_newline = buffer:find("[^\r\n]*$")
+      local last_newline = buffer:match(".*\n()")
       if last_newline then
         buffer = buffer:sub(last_newline)
-      else
-        buffer = ""
       end
 
       for _, line in ipairs(lines) do
@@ -83,7 +86,7 @@ function M.start(system_prompt, user_prompt, selection)
   end
 
   -- Enable debug mode globally to log chunks if we are failing silently
-  local debug_chunks = true
+  local debug_chunks = false
 
   local req = provider_module.build_request({
     api_key = api_key_val,
