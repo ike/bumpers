@@ -82,6 +82,9 @@ function M.start(system_prompt, user_prompt, selection)
     return
   end
 
+  -- Enable debug mode globally to log chunks if we are failing silently
+  local debug_chunks = true
+
   local req = provider_module.build_request({
     api_key = api_key_val,
     model = opts.model,
@@ -105,6 +108,10 @@ function M.start(system_prompt, user_prompt, selection)
   local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, start_row, start_col, {})
 
   local function insert_text(text)
+    if debug_chunks then
+      vim.notify("CHUNK: " .. vim.inspect(text), vim.log.levels.INFO)
+    end
+    
     local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns_id, extmark_id, {})
     if not mark or #mark == 0 then return end
     
@@ -121,7 +128,11 @@ function M.start(system_prompt, user_prompt, selection)
     
     -- Using nvim_buf_set_text to insert text exactly at cursor position.
     -- r, c is start, r, c is end (meaning insert at pos)
-    vim.api.nvim_buf_set_text(bufnr, r, c, r, c, new_lines)
+    local ok, err = pcall(vim.api.nvim_buf_set_text, bufnr, r, c, r, c, new_lines)
+    if not ok then
+      vim.notify("bumpers text insert error: " .. tostring(err), vim.log.levels.ERROR)
+      return
+    end
     
     -- Update extmark to the very end of the newly inserted chunk
     local new_r = r + #new_lines - 1
@@ -160,6 +171,9 @@ function M.start(system_prompt, user_prompt, selection)
         end
         vim.notify(err_msg, vim.log.levels.ERROR)
       else
+        if debug_chunks then
+          vim.notify("FULL RES BODY: " .. vim.inspect(res.body), vim.log.levels.INFO)
+        end
         vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
       end
     end)
