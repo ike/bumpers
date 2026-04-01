@@ -35,7 +35,7 @@ end
 ---@param end_row number
 ---@param end_col number
 ---@return table { word = string, row = number, col = number }
-local function extract_tokens(start_row, end_row)
+local function extract_tokens(start_row, start_col, end_row, end_col)
   local bufnr = vim.api.nvim_get_current_buf()
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, end_row, false)
   
@@ -45,16 +45,30 @@ local function extract_tokens(start_row, end_row)
   for i, line in ipairs(lines) do
     local row = start_row + i - 1
     
+    local line_start = 1
+    local line_end = #line
+    
+    if i == 1 then
+      line_start = start_col
+    end
+    if i == #lines then
+      line_end = end_col
+    end
+    
     -- Iterate through all word-like tokens using Lua pattern matching
     -- `()` captures the starting index
     for start_idx, word in line:gmatch("()([%a_][%w_]*)") do
-      if not seen[word] then
-        seen[word] = true
-        table.insert(tokens, {
-          word = word,
-          row = row,
-          col = start_idx
-        })
+      local word_end = start_idx + #word - 1
+      -- Ensure the token falls within our column bounds
+      if start_idx >= line_start and word_end <= line_end then
+        if not seen[word] then
+          seen[word] = true
+          table.insert(tokens, {
+            word = word,
+            row = row,
+            col = start_idx
+          })
+        end
       end
     end
   end
@@ -74,11 +88,20 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
   -- Check if there are any active clients for this buffer
   local get_clients = vim.lsp.get_clients or vim.lsp.get_active_clients
   local clients = get_clients({ bufnr = bufnr })
-  if #clients == 0 then
-    return "No active LSP clients."
+  
+  local hover_capable = false
+  for _, client in ipairs(clients) do
+    if client.supports_method and client.supports_method("textDocument/hover") then
+      hover_capable = true
+      break
+    end
   end
   
-  local tokens = extract_tokens(start_row, end_row)
+  if not hover_capable then
+    return "No active LSP clients supporting hover."
+  end
+  
+  local tokens = extract_tokens(start_row, start_col, end_row, end_col)
   local hover_info = {}
   
   -- Gather hover requests synchronously
@@ -89,9 +112,27 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
       position = { line = token.row - 1, character = token.col - 1 }
     }
     
-    local results = vim.lsp.buf_request_sync(bufnr, 'textDocument/hover', params, 1000)
+    local results, err = vim.lsp.buf_request_sync(bufnr, 'textDocument/hover', params, 1000)
+    
+    if err then
+      -- If there is a fatal RPC error (e.g. timeout), abort further queries
+      break
+    end
     
     if results then
+      local all_errored = true
+      for _, res in pairs(results) do
+        if not res.error then
+          all_errored = false
+          break
+        end
+      end
+      
+      -- If every client explicitly returned an error for this request, assume the LSP is failing and abort
+      if all_errored then
+        break
+      end
+
       for client_id, res in pairs(results) do
         if res.result and res.result.contents then
           local contents = res.result.contents
