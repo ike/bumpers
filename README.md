@@ -14,39 +14,29 @@ Bumpers is a Neovim plugin that intelligently rewrites your visually selected co
 
 ## Installation
 
-### Neovim 0.12+ (Built-in `vim.pack`)
+### Local Development
 
-If you are using Neovim 0.12 or newer, you can use the native package manager:
+If you are developing this plugin locally and want to use it immediately without pushing to GitHub or relying on Neovim 0.12's `vim.pack` cloning behavior, the best practice is to directly prepend the path to your Neovim `runtimepath`:
 
 ```lua
--- Add plenary dependency
+-- In your init.lua
+-- 1. Ensure the dependency is available
 vim.pack.add({ "nvim-lua/plenary.nvim" })
 
--- Add bumpers from your local directory (or GitHub URL when published)
-vim.pack.add({ 
-  {
-    "ike/bumpers",
-    -- If testing locally, override the src path to point to your directory:
-    -- src = "/Users/ike/code/personal/bumpers",
-    config = function()
-      require("bumpers").setup({
-        provider = "anthropic",
-        model = "claude-opus-4-6", 
-        
-        -- You can provide the key directly as a string, or use a function to defer evaluation
-        -- so that custom environment variables are read at execution time.
-        api_keys = {
-          anthropic = function() return os.getenv("MY_CUSTOM_ANTHROPIC_KEY") end,
-          gemini = function() return os.getenv("GEMINI_API_KEY") end,
-        },
-        lsp_timeout_ms = 1000,
-      })
-      
-      -- Map your trigger key
-      vim.keymap.set("v", "<leader>bb", ":Bump<CR>", { desc = "Bumpers Rewrite" })
-    end
-  }
+-- 2. Prepend your local path
+vim.opt.runtimepath:prepend("/Users/ike/code/personal/bumpers")
+
+-- 3. Set up your configuration
+require("bumpers").setup({
+  provider = "anthropic",
+  model = "claude-opus-4-6", 
+  api_keys = {
+    anthropic = function() return os.getenv("BUMPERS_API_KEY") end,
+    gemini = function() return os.getenv("GEMINI_API_KEY") end,
+  },
 })
+
+vim.keymap.set("v", "<leader>bb", ":Bump<CR>", { desc = "Bumpers Rewrite" })
 ```
 
 ### Using lazy.nvim (Pre-0.12 or preferred)
