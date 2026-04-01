@@ -5,9 +5,19 @@ local M = {}
 
 ---Buffers and parses SSE lines from raw chunk stream
 -- Note: plenary.curl stream callback receives data already split into lines without \n
-local function make_sse_parser(provider_module, callback)
+local function make_sse_parser(provider_module, callback, debug_chunks)
   return function(err, line)
-    if err then return end
+    if err then 
+      if debug_chunks then
+        vim.notify("STREAM ERR: " .. tostring(err), vim.log.levels.ERROR)
+      end
+      return 
+    end
+    
+    if debug_chunks then
+      vim.notify("RAW LINE: " .. vim.inspect(line), vim.log.levels.INFO)
+    end
+    
     if line and line ~= "" then
       local text = provider_module.parse_sse(line)
       if text and text ~= "" then
@@ -68,7 +78,7 @@ function M.start(system_prompt, user_prompt, selection)
   end
 
   -- Enable debug mode globally to log chunks if we are failing silently
-  local debug_chunks = false
+  local debug_chunks = true
 
   local req = provider_module.build_request({
     api_key = api_key_val,
@@ -76,6 +86,12 @@ function M.start(system_prompt, user_prompt, selection)
     system_prompt = system_prompt,
     user_prompt = user_prompt,
   })
+
+  -- Dump the full request to see what's being sent
+  if debug_chunks then
+    vim.notify("REQUEST URL: " .. vim.inspect(req.url), vim.log.levels.INFO)
+    vim.notify("REQUEST BODY: " .. string.sub(vim.inspect(req.body), 1, 300) .. "...", vim.log.levels.INFO)
+  end
 
   local bufnr = vim.api.nvim_get_current_buf()
   local start_row = selection.start_row - 1
@@ -126,7 +142,7 @@ function M.start(system_prompt, user_prompt, selection)
     vim.api.nvim_buf_set_extmark(bufnr, ns_id, new_r, new_c, { id = extmark_id })
   end
 
-  local parser = make_sse_parser(provider_module, insert_text)
+  local parser = make_sse_parser(provider_module, insert_text, debug_chunks)
 
   -- Plenary curl expects headers as an array of strings like { "Content-Type: application/json" }
   -- or a dictionary like { ["Content-Type"] = "application/json" }
