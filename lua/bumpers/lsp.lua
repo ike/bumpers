@@ -91,10 +91,12 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
   
   local hover_clients = {}
   for _, client in ipairs(clients) do
-    -- Neovim 0.11+ supports_method takes a second argument for bufnr
+    -- Neovim 0.11+ client.supports_method takes a second argument for bufnr
+    -- Neovim 0.12 deprecates client.supports_method in favor of client:supports_method()
     local supports = false
-    if client.supports_method then
-      supports = client.supports_method("textDocument/hover", { bufnr = bufnr })
+    if type(client.supports_method) == "function" then
+      -- Call as a method on the client object (works in 0.12+ and avoids deprecation warning)
+      supports = client:supports_method("textDocument/hover", { bufnr = bufnr })
     elseif client.server_capabilities and client.server_capabilities.hoverProvider then
       supports = true
     end

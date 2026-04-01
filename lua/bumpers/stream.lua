@@ -9,28 +9,30 @@ local function make_sse_parser(provider_module, callback)
   return function(err, chunk)
     if chunk then
       buffer = buffer .. chunk
-      local lines = {}
       
-      -- Look for complete lines ending in \n
-      -- Anthropic sends "event: ...\ndata: ...\n\n"
-      for line in buffer:gmatch("([^\n]*)\n") do
-        if line and line ~= "" then
-          table.insert(lines, line)
+      -- We will loop and process complete lines
+      while true do
+        local newline_pos = buffer:find("\n")
+        if not newline_pos then
+          break
         end
-      end
-      
-      -- Keep the incomplete line in the buffer
-      local last_newline = buffer:match(".*\n()")
-      if last_newline then
-        buffer = buffer:sub(last_newline)
-      end
-
-      for _, line in ipairs(lines) do
-        local text = provider_module.parse_sse(line)
-        if text and text ~= "" then
-          vim.schedule(function()
-            callback(text)
-          end)
+        
+        -- Extract the full line (excluding the newline itself)
+        local line = buffer:sub(1, newline_pos - 1)
+        
+        -- Remove this line from the buffer
+        buffer = buffer:sub(newline_pos + 1)
+        
+        -- Strip any trailing carriage return just in case
+        line = line:gsub("\r$", "")
+        
+        if line ~= "" then
+          local text = provider_module.parse_sse(line)
+          if text and text ~= "" then
+            vim.schedule(function()
+              callback(text)
+            end)
+          end
         end
       end
     end
