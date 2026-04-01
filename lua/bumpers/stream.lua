@@ -51,9 +51,18 @@ end
 function M.start(system_prompt, user_prompt, selection)
   local opts = config.get()
   
-  local api_key = opts.api_keys[opts.provider]
+  -- Try to get the API key from config, fallback to os.getenv at runtime
+  local api_key = opts.api_keys and opts.api_keys[opts.provider]
   if not api_key or api_key == "" then
-    vim.notify("bumpers: Missing API key for " .. opts.provider, vim.log.levels.ERROR)
+    if opts.provider == "anthropic" then
+      api_key = os.getenv("ANTHROPIC_API_KEY")
+    elseif opts.provider == "gemini" then
+      api_key = os.getenv("GEMINI_API_KEY")
+    end
+  end
+
+  if not api_key or api_key == "" then
+    vim.notify("bumpers: Missing API key for " .. opts.provider .. ". Set it in setup() or via os.getenv()", vim.log.levels.ERROR)
     return
   end
 

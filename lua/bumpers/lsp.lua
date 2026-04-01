@@ -89,20 +89,22 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
   local get_clients = vim.lsp.get_clients or vim.lsp.get_active_clients
   local clients = get_clients({ bufnr = bufnr })
   
-  local hover_capable = false
+  local hover_clients = {}
   for _, client in ipairs(clients) do
-    if client.supports_method and client.supports_method("textDocument/hover") then
-      hover_capable = true
-      break
+    -- Neovim 0.11+ supports_method takes a second argument for bufnr
+    local supports = false
+    if client.supports_method then
+      supports = client.supports_method("textDocument/hover", { bufnr = bufnr })
+    elseif client.server_capabilities and client.server_capabilities.hoverProvider then
+      supports = true
     end
-    -- Fallback for older Neovim versions where server_capabilities might be checked directly
-    if client.server_capabilities and client.server_capabilities.hoverProvider then
-      hover_capable = true
-      break
+    
+    if supports then
+      table.insert(hover_clients, client)
     end
   end
   
-  if not hover_capable then
+  if #hover_clients == 0 then
     return "No active LSP clients supporting hover."
   end
   
@@ -112,62 +114,42 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
   -- Gather hover requests synchronously
   for _, token in ipairs(tokens) do
     local params = {
-      textDocument = vim.lsp.util.make_text_document_params(),
+      textDocument = vim.lsp.util.make_text_document_params(bufnr),
       -- position is 0-indexed in LSP
       position = { line = token.row - 1, character = token.col - 1 }
     }
     
-    local ok, results, err = pcall(vim.lsp.buf_request_sync, bufnr, 'textDocument/hover', params, 1000)
-    
-    if not ok or err then
-      -- If there is a fatal RPC error (e.g. timeout) or a plugin error, abort further queries
-      -- In Neovim 0.12, if no client supports it, buf_request_sync itself throws an error, so pcall catches it
-      break
-    end
-    
-    if results then
-      local all_errored = true
-      for _, res in pairs(results) do
-        if not res.error then
-          all_errored = false
-          break
-        end
-      end
+    local token_hovered = false
+    for _, client in ipairs(hover_clients) do
+      -- Call the client specifically instead of the global broadcast to avoid unsupported method errors
+      local res, err = client.request_sync('textDocument/hover', params, 1000, bufnr)
       
-      -- If every client explicitly returned an error for this request, assume the LSP is failing and abort
-      if all_errored then
-        break
-      end
-
-      for client_id, res in pairs(results) do
-        if res.result and res.result.contents then
-          local contents = res.result.contents
-          local md_lines = {}
-          
-          if type(contents) == 'table' then
-            if contents.kind == 'markdown' or contents.kind == 'plaintext' then
-               md_lines = { contents.value }
-            elseif contents.language then
-               md_lines = { "```" .. contents.language .. "\n" .. contents.value .. "\n```" }
-            elseif type(contents) == 'table' and contents[1] then
-               for _, c in ipairs(contents) do
-                 if type(c) == 'string' then
-                   table.insert(md_lines, c)
-                 elseif type(c) == 'table' and c.value then
-                   table.insert(md_lines, c.value)
-                 end
+      if res and res.result and res.result.contents then
+        local contents = res.result.contents
+        local md_lines = {}
+        
+        if type(contents) == 'table' then
+          if contents.kind == 'markdown' or contents.kind == 'plaintext' then
+             md_lines = { contents.value }
+          elseif contents.language then
+             md_lines = { "```" .. contents.language .. "\n" .. contents.value .. "\n```" }
+          elseif type(contents) == 'table' and contents[1] then
+             for _, c in ipairs(contents) do
+               if type(c) == 'string' then
+                 table.insert(md_lines, c)
+               elseif type(c) == 'table' and c.value then
+                 table.insert(md_lines, c.value)
                end
-            end
-          elseif type(contents) == 'string' then
-            md_lines = { contents }
+             end
           end
-          
-          if #md_lines > 0 then
-            table.insert(hover_info, string.format("### Token: %s\n%s\n", token.word, table.concat(md_lines, "\n")))
-          end
-          
-          -- Once we get a successful hover response for a token, stop querying other clients for this token
-          break
+        elseif type(contents) == 'string' then
+          md_lines = { contents }
+        end
+        
+        if #md_lines > 0 then
+          table.insert(hover_info, string.format("### Token: %s\n%s\n", token.word, table.concat(md_lines, "\n")))
+          token_hovered = true
+          break -- We got the hover from one client, no need to ask others
         end
       end
     end
