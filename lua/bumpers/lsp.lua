@@ -121,10 +121,24 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
     
     local token_hovered = false
     for _, client in ipairs(hover_clients) do
-      -- Call the client specifically instead of the global broadcast to avoid unsupported method errors
-      local res, err = client.request_sync('textDocument/hover', params, 1000, bufnr)
+      -- In Neovim 0.12+, client.request_sync throws a hard lua error if the server internally 
+      -- rejects the method despite capabilities saying otherwise. We must wrap it in pcall.
+      local ok, res, err = true, nil, nil
       
-      if res and res.result and res.result.contents then
+      if type(client.request_sync) == "function" then
+        ok, res, err = pcall(client.request_sync, client, 'textDocument/hover', params, 1000, bufnr)
+      else
+        ok, res, err = pcall(vim.lsp.buf_request_sync, bufnr, 'textDocument/hover', params, 1000)
+        if ok and res then
+          res = res[client.id]
+        end
+      end
+      
+      if not ok or not res then
+        goto continue_client
+      end
+      
+      if res.result and res.result.contents then
         local contents = res.result.contents
         local md_lines = {}
         
@@ -152,6 +166,8 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
           break -- We got the hover from one client, no need to ask others
         end
       end
+      
+      ::continue_client::
     end
   end
   
