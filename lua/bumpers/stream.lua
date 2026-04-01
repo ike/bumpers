@@ -53,26 +53,21 @@ function M.start(system_prompt, user_prompt, selection)
   
   -- The API key can be explicitly provided as a string in opts.api_keys, 
   -- or we dynamically fallback to the default env var names if omitted.
-  local api_key = opts.api_keys and opts.api_keys[opts.provider]
+  local api_key_val = opts.api_keys and opts.api_keys[opts.provider]
   
-  -- If it's still empty, it might be that the user provided an empty string or it's not set.
-  -- But if the user provided a *different* env var name in their config via os.getenv("CUSTOM_NAME"),
-  -- it should have been captured during setup. If not, fallback to standard names.
-  if not api_key or api_key == "" then
+  if not api_key_val or api_key_val == "" then
     if opts.provider == "anthropic" then
-      api_key = os.getenv("ANTHROPIC_API_KEY")
+      api_key_val = os.getenv("ANTHROPIC_API_KEY")
     elseif opts.provider == "gemini" then
-      api_key = os.getenv("GEMINI_API_KEY")
+      api_key_val = os.getenv("GEMINI_API_KEY")
     end
   end
 
-  -- We need to evaluate the config explicitly if the user passed a function 
-  -- or string that resolves to the key.
-  if type(api_key) == "function" then
-    api_key = api_key()
+  if type(api_key_val) == "function" then
+    api_key_val = api_key_val()
   end
 
-  if not api_key or api_key == "" then
+  if not api_key_val or api_key_val == "" then
     vim.notify("bumpers: Missing API key for " .. opts.provider .. ". Set it in setup() or via os.getenv()", vim.log.levels.ERROR)
     return
   end
@@ -88,7 +83,7 @@ function M.start(system_prompt, user_prompt, selection)
   end
 
   local req = provider_module.build_request({
-    api_key = api_key,
+    api_key = api_key_val,
     model = opts.model,
     system_prompt = system_prompt,
     user_prompt = user_prompt,
@@ -133,15 +128,22 @@ function M.start(system_prompt, user_prompt, selection)
 
   local parser = make_sse_parser(provider_module, insert_text)
 
-  local headers = {}
+  -- Plenary curl expects headers as an array of strings like { "Content-Type: application/json" }
+  -- or a dictionary like { ["Content-Type"] = "application/json" }
+  -- But we must ensure the *values* are strictly strings, not functions
+  local headers_dict = {}
   for k, v in pairs(req.headers) do
-    table.insert(headers, string.format("%s: %s", k, v))
+    if type(v) == "function" then
+      headers_dict[k] = tostring(v())
+    else
+      headers_dict[k] = tostring(v)
+    end
   end
 
   vim.notify("bumpers: Requesting " .. opts.provider .. "...", vim.log.levels.INFO)
 
   curl.post(req.url, {
-    headers = req.headers,
+    headers = headers_dict,
     body = req.body,
     stream = parser,
     callback = vim.schedule_wrap(function(res)
