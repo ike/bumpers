@@ -4,8 +4,9 @@ M.options = {
   provider = "anthropic", -- "anthropic" or "gemini"
   model = "claude-opus-4-6", -- Default for Anthropic; if gemini, use e.g., "gemini-3.1-pro-preview"
   api_keys = {
-    anthropic = os.getenv("ANTHROPIC_API_KEY"),
-    gemini = os.getenv("GEMINI_API_KEY"),
+    -- Default will evaluate to nil, which is fine until evaluated via get_api_key
+    anthropic = nil,
+    gemini = nil,
   },
   lsp_timeout_ms = 1000, -- Timeout for synchronous LSP hover requests
 }
