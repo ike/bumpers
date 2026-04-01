@@ -140,6 +140,19 @@ function M.start(system_prompt, user_prompt, selection)
     
     local new_lines = vim.split(text, "\n", { plain = true })
     
+    -- Indentation matching: If the code isn't being pasted at column 0,
+    -- all subsequent lines returned by the LLM (which it assumed started at col 0)
+    -- should be padded to match the starting column's indentation level.
+    if c > 0 and #new_lines > 1 then
+      local indent = string.rep(" ", c)
+      for i = 2, #new_lines do
+        -- Only indent if the line actually has content
+        if new_lines[i] ~= "" then
+          new_lines[i] = indent .. new_lines[i]
+        end
+      end
+    end
+    
     pcall(vim.cmd, "undojoin")
     
     local ok, err = pcall(vim.api.nvim_buf_set_text, bufnr, r, c, r, c, new_lines)
