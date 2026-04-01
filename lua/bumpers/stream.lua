@@ -111,15 +111,19 @@ function M.start(system_prompt, user_prompt, selection)
     local r = mark[1]
     local c = mark[2]
     
+    -- In vim.api.nvim_buf_set_text, if you are just appending without newlines,
+    -- it expects { "text" }. If text contains newlines, you must split it.
+    -- vim.split(text, "\n") returns { "line1", "line2", "" } if text ends with \n
     local new_lines = vim.split(text, "\n", { plain = true })
-    if #new_lines == 0 then return end
     
     -- Crucial: Join this edit to the previous one in the undo tree
     pcall(vim.cmd, "undojoin")
     
+    -- Using nvim_buf_set_text to insert text exactly at cursor position.
+    -- r, c is start, r, c is end (meaning insert at pos)
     vim.api.nvim_buf_set_text(bufnr, r, c, r, c, new_lines)
     
-    -- Manually update extmark to the end of the newly inserted text
+    -- Update extmark to the very end of the newly inserted chunk
     local new_r = r + #new_lines - 1
     local new_c = (#new_lines == 1) and (c + string.len(new_lines[1])) or string.len(new_lines[#new_lines])
     
@@ -150,7 +154,11 @@ function M.start(system_prompt, user_prompt, selection)
       vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
       
       if res.status < 200 or res.status >= 300 then
-        vim.notify("bumpers: Error " .. res.status .. " - " .. (res.body or ""), vim.log.levels.ERROR)
+        local err_msg = "bumpers: Error " .. res.status
+        if res.body and res.body ~= "" then
+          err_msg = err_msg .. " - " .. vim.inspect(res.body)
+        end
+        vim.notify(err_msg, vim.log.levels.ERROR)
       else
         vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
       end
