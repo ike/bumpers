@@ -12,7 +12,7 @@ end
 ---@param cmd_opts table Configuration from user command
 function M.run(cmd_opts)
   local prompt = require("bumpers.prompt")
-  local stream = require("bumpers.stream")
+  local request = require("bumpers.request")
   
   -- If range is provided (0 = no range, 1 = one line, 2 = range)
   if cmd_opts and cmd_opts.range == 0 then
@@ -35,7 +35,7 @@ function M.run(cmd_opts)
         return
       end
 
-      stream.start(system_prompt, user_prompt, selection)
+      request.start(system_prompt, user_prompt, selection)
     end)
   end)
 end

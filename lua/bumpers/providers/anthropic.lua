@@ -16,30 +16,27 @@ function M.build_request(opts)
       { role = "user", content = opts.user_prompt },
     },
     max_tokens = 8192, -- increased max tokens for 3.7
-    stream = true,
+    stream = false,
   }
 
   return {
     url = "https://api.anthropic.com/v1/messages",
     headers = headers,
-    body = vim.fn.json_encode(payload),
+    body = vim.json.encode(payload),
   }
 end
 
----Parses an SSE chunk and returns the delta text if any
----@param line string The SSE line
+---Parses the full JSON response and returns the text
+---@param json_str string The JSON response
 ---@return string|nil
-function M.parse_sse(line)
-  if not line or line == "" then return nil end
+function M.parse_response(json_str)
+  if not json_str or json_str == "" then return nil end
   
-  if line:match("^data: ") then
-    local data_str = line:sub(7)
-    if data_str == "[DONE]" then return nil end
-    
-    local ok, data = pcall(vim.fn.json_decode, data_str)
-    if ok and data then
-      if data.type == "content_block_delta" and data.delta and data.delta.text then
-        return data.delta.text
+  local ok, data = pcall(vim.json.decode, json_str)
+  if ok and data and data.content and #data.content > 0 then
+    for _, block in ipairs(data.content) do
+      if block.type == "text" and block.text then
+        return block.text
       end
     end
   end

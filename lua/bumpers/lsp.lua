@@ -29,7 +29,7 @@ function M.get_diagnostics(start_row, end_row)
   return table.concat(relevant, "\n")
 end
 
----Extracts token coordinates within the selection for hover lookup
+---Extracts up to 10 unique, non-keyword token coordinates within the selection for hover lookup
 ---@param start_row number
 ---@param start_col number
 ---@param end_row number
@@ -39,10 +39,24 @@ local function extract_tokens(start_row, start_col, end_row, end_col)
   local bufnr = vim.api.nvim_get_current_buf()
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, end_row, false)
   
+  -- Basic set of common keywords to ignore across languages to save LSP requests
+  local ignore_keywords = {
+    ["if"]=true, ["else"]=true, ["elseif"]=true, ["for"]=true, ["while"]=true,
+    ["return"]=true, ["function"]=true, ["local"]=true, ["const"]=true, ["let"]=true,
+    ["var"]=true, ["import"]=true, ["export"]=true, ["from"]=true, ["class"]=true,
+    ["struct"]=true, ["interface"]=true, ["type"]=true, ["public"]=true, ["private"]=true,
+    ["protected"]=true, ["true"]=true, ["false"]=true, ["nil"]=true, ["null"]=true,
+    ["undefined"]=true, ["and"]=true, ["or"]=true, ["not"]=true, ["in"]=true, ["of"]=true
+  }
+
   local tokens = {}
   local seen = {}
+  local token_count = 0
+  local max_tokens = 10
   
   for i, line in ipairs(lines) do
+    if token_count >= max_tokens then break end
+    
     local row = start_row + i - 1
     
     local line_start = 1
@@ -58,11 +72,14 @@ local function extract_tokens(start_row, start_col, end_row, end_col)
     -- Iterate through all word-like tokens using Lua pattern matching
     -- `()` captures the starting index
     for start_idx, word in line:gmatch("()([%a_][%w_]*)") do
+      if token_count >= max_tokens then break end
+      
       local word_end = start_idx + #word - 1
-      -- Ensure the token falls within our column bounds
+      -- Ensure the token falls within our column bounds and isn't a keyword
       if start_idx >= line_start and word_end <= line_end then
-        if not seen[word] then
+        if not seen[word] and not ignore_keywords[word] then
           seen[word] = true
+          token_count = token_count + 1
           table.insert(tokens, {
             word = word,
             row = row,
@@ -85,23 +102,11 @@ end
 function M.get_hover_info(start_row, start_col, end_row, end_col)
   local bufnr = vim.api.nvim_get_current_buf()
   
-  -- Check if there are any active clients for this buffer
-  local get_clients = vim.lsp.get_clients or vim.lsp.get_active_clients
-  local clients = get_clients({ bufnr = bufnr })
+  local clients = vim.lsp.get_clients({ bufnr = bufnr })
   
   local hover_clients = {}
   for _, client in ipairs(clients) do
-    -- Neovim 0.11+ client.supports_method takes a second argument for bufnr
-    -- Neovim 0.12 deprecates client.supports_method in favor of client:supports_method()
-    local supports = false
-    if type(client.supports_method) == "function" then
-      -- Call as a method on the client object (works in 0.12+ and avoids deprecation warning)
-      supports = client:supports_method("textDocument/hover", { bufnr = bufnr })
-    elseif client.server_capabilities and client.server_capabilities.hoverProvider then
-      supports = true
-    end
-    
-    if supports then
+    if client:supports_method("textDocument/hover", { bufnr = bufnr }) then
       table.insert(hover_clients, client)
     end
   end
@@ -113,28 +118,14 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
   local tokens = extract_tokens(start_row, start_col, end_row, end_col)
   local hover_info = {}
   
-  -- Gather hover requests synchronously
   for _, token in ipairs(tokens) do
     local params = {
       textDocument = vim.lsp.util.make_text_document_params(bufnr),
-      -- position is 0-indexed in LSP
       position = { line = token.row - 1, character = token.col - 1 }
     }
     
-    local token_hovered = false
     for _, client in ipairs(hover_clients) do
-      -- In Neovim 0.12+, client.request_sync throws a hard lua error if the server internally 
-      -- rejects the method despite capabilities saying otherwise. We must wrap it in pcall.
-      local ok, res, err = true, nil, nil
-      
-      if type(client.request_sync) == "function" then
-        ok, res, err = pcall(client.request_sync, client, 'textDocument/hover', params, 1000, bufnr)
-      else
-        ok, res, err = pcall(vim.lsp.buf_request_sync, bufnr, 'textDocument/hover', params, 1000)
-        if ok and res then
-          res = res[client.id]
-        end
-      end
+      local ok, res, err = pcall(client.request_sync, client, 'textDocument/hover', params, 1000, bufnr)
       
       if not ok or not res then
         goto continue_client
@@ -149,7 +140,7 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
              md_lines = { contents.value }
           elseif contents.language then
              md_lines = { "```" .. contents.language .. "\n" .. contents.value .. "\n```" }
-          elseif type(contents) == 'table' and contents[1] then
+          elseif contents[1] then
              for _, c in ipairs(contents) do
                if type(c) == 'string' then
                  table.insert(md_lines, c)
@@ -164,8 +155,7 @@ function M.get_hover_info(start_row, start_col, end_row, end_col)
         
         if #md_lines > 0 then
           table.insert(hover_info, string.format("### Token: %s\n%s\n", token.word, table.concat(md_lines, "\n")))
-          token_hovered = true
-          break -- We got the hover from one client, no need to ask others
+          break
         end
       end
       

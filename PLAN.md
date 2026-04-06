@@ -1,62 +1,26 @@
-# Bumpers - Implementation Plan
+# Plan: Remove Deprecations & Modernize API Usage (Neovim 0.12+)
 
-## Overview
-`bumpers` is a Neovim plugin that leverages advanced LLMs (Anthropic Claude 4.6 and Gemini 3.1) to intelligently rewrite visually selected code. It distinguishes itself by enriching the LLM prompt with powerful local context, specifically the entire file buffer and relevant LSP data (diagnostics and hover/type signatures) associated with the selected text.
+## Objective
+Update the `bumpers` plugin to exclusively use modern Neovim 0.12+ APIs, removing legacy polyfills and deprecated functions. This will improve performance and maintainability by eliminating compatibility layers.
 
-## Core Features
-1. **Model Support**: Native support for Anthropic (e.g., `claude-opus-4-6`) and Gemini (e.g., `gemini-3.1-pro-preview`) via configuration.
-2. **Context-Aware Prompting**:
-   - Includes the full buffer text to understand the surrounding environment.
-   - Extracts LSP diagnostics (errors, warnings) overlapping with the visual selection.
-   - Extracts LSP hover information (type signatures, docs) for unique tokens within the selection.
-3. **Streamed Inline Replacement**: Streams the LLM response directly into the buffer, replacing the original visual selection in real-time.
-4. **Single-Step Undo**: Uses Neovim's `undojoin` during the streaming process so that the entire generated rewrite can be reverted with a single press of `u`.
-5. **Minimal UI**: Model selection is handled entirely via `setup()` config. The only UI element is a `vim.ui.input` prompt asking for the specific rewrite instruction.
+## 1. Performance Optimization: JSON Parsing
+Replace legacy Vimscript JSON functions with native Lua/CJSON bindings in both providers.
+- **Files**:
+  - `lua/bumpers/providers/anthropic.lua`
+  - `lua/bumpers/providers/gemini.lua`
+- **Changes**:
+  - Replace `vim.fn.json_encode` with `vim.json.encode`
+  - Replace `vim.fn.json_decode` with `vim.json.decode`
 
-## Directory & File Structure
-```text
-/Users/ike/code/personal/bumpers/
-├── lua/
-│   └── bumpers/
-│       ├── init.lua            # Plugin entry point: handles setup(opts) and creates the main command
-│       ├── config.lua          # Default configuration (models, API keys)
-│       ├── visual.lua          # Utilities for extracting visual selections and buffer text
-│       ├── lsp.lua             # Logic for querying and formatting LSP diagnostics and hover info
-│       ├── prompt.lua          # Assembles the XML-like prompt with context, LSP data, and user instruction
-│       ├── stream.lua          # Handles SSE parsing and the `undojoin` streaming insertion
-│       └── providers/
-│           ├── anthropic.lua   # Formats payloads/headers for Anthropic Messages API
-│           └── gemini.lua      # Formats payloads/headers for Gemini GenerateContent API (v1beta)
-└── PLAN.md                     # This file
-```
+## 2. Maintainability: LSP API Modernization (Neovim 0.12+)
+Remove all backwards-compatibility code for Neovim versions prior to 0.12.
+- **File**: `lua/bumpers/lsp.lua`
+- **Changes**:
+  - **Client Retrieval**: Remove `vim.lsp.get_active_clients` fallback. Use `vim.lsp.get_clients({ bufnr = bufnr })` directly.
+  - **Method Support Check**: Remove the `type(client.supports_method) == "function"` check and the fallback to `client.server_capabilities.hoverProvider`. Assume `client:supports_method("textDocument/hover", { bufnr = bufnr })` is always available as a method on the client object.
+  - **Synchronous Request**: Remove the `type(client.request_sync) == "function"` check and the fallback to `vim.lsp.buf_request_sync`. Assume `client:request_sync('textDocument/hover', params, 1000, bufnr)` is always available as a method on the client object.
 
-## Implementation Phases
-
-### Phase 1: Foundation
-- Create `lua/bumpers/config.lua` to define default options (provider, model, API keys).
-- Create `lua/bumpers/init.lua` to provide the `setup()` function and register a command (e.g., `:Bump`).
-
-### Phase 2: Neovim Utilities
-- Implement `lua/bumpers/visual.lua`:
-  - Function to get the current visual selection's text and its start/end coordinates.
-  - Function to get the full content of the current buffer.
-
-### Phase 3: LSP Context (The "Secret Sauce")
-- Implement `lua/bumpers/lsp.lua`:
-  - `get_diagnostics(start_row, end_row)`: Query `vim.diagnostic.get` and filter.
-  - `get_hover_info(selection_text)`: Extract tokens, deduplicate, and run synchronous `textDocument/hover` requests to gather type signatures.
-
-### Phase 4: Prompt Engineering
-- Implement `lua/bumpers/prompt.lua`:
-  - Build a structured prompt (e.g., using `<file_context>`, `<lsp_diagnostics>`, `<lsp_hover_types>`, `<selection_to_rewrite>`, `<instruction>`) to send to the LLMs.
-  - Add system instructions to only output raw code without markdown wrapping (so it can be directly inserted).
-
-### Phase 5: Providers & Streaming
-- Implement `lua/bumpers/stream.lua`:
-  - Core logic utilizing `plenary.curl` to handle SSE streams.
-  - **Undo Trick**: Delete the original selection first, then use `vim.cmd('undojoin')` before inserting each new chunk from the stream.
-- Implement `lua/bumpers/providers/anthropic.lua`: Request formatter and SSE chunk parser for Claude 4.6.
-- Implement `lua/bumpers/providers/gemini.lua`: Request formatter and SSE chunk parser for Gemini 3.1.
-
-## Dependencies
-- `nvim-lua/plenary.nvim` (for HTTP requests via `plenary.curl`).
+## Execution Strategy
+1. Wait for user approval of this plan.
+2. Edit `anthropic.lua` and `gemini.lua` to update JSON parsing.
+3. Edit `lsp.lua` to strip legacy polyfills and streamline the hover request logic.
