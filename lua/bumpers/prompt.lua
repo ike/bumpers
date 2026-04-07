@@ -1,5 +1,6 @@
 local visual = require("bumpers.visual")
 local lsp = require("bumpers.lsp")
+local secrets = require("bumpers.secrets")
 
 local M = {}
 
@@ -91,7 +92,13 @@ IMPORTANT:
 <selection_to_process>
 %s
 </selection_to_process>
-]], instruction, buffer_content, diagnostics, hover_info, other_buffers_context, selection.text)
+]], 
+  secrets.obfuscate(instruction), 
+  secrets.obfuscate(buffer_content), 
+  secrets.obfuscate(diagnostics), 
+  secrets.obfuscate(hover_info), 
+  secrets.obfuscate(other_buffers_context), 
+  secrets.obfuscate(selection.text))
 
   return system_prompt, user_prompt, selection
 end
