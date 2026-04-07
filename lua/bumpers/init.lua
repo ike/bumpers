@@ -31,12 +31,19 @@ function M.run(cmd_opts)
     vim.schedule(function()
       local mode = "rewrite"
       local actual_instruction = instruction
-      if instruction:match("^#review") then
-        mode = "review"
-        actual_instruction = instruction:gsub("^#review%s*", "")
+      local include_buffers = false
+
+      if actual_instruction:match("!buffers") then
+        include_buffers = true
+        actual_instruction = actual_instruction:gsub("!buffers%s*", "")
       end
 
-      local ok, system_prompt, user_prompt, selection = pcall(prompt.build, actual_instruction, mode)
+      if actual_instruction:match("^#review") then
+        mode = "review"
+        actual_instruction = actual_instruction:gsub("^#review%s*", "")
+      end
+
+      local ok, system_prompt, user_prompt, selection = pcall(prompt.build, actual_instruction, mode, include_buffers)
       if not ok then
         vim.notify("bumpers: Error building prompt: " .. tostring(system_prompt), vim.log.levels.ERROR)
         return

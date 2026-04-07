@@ -6,10 +6,11 @@ local M = {}
 ---Assembles the prompt containing context, diagnostics, types, and the instruction
 ---@param instruction string The user's rewrite or review instruction
 ---@param mode string The mode, either "rewrite" or "review"
+---@param include_buffers boolean Whether to include other visible buffers
 ---@return string System prompt
 ---@return string User prompt
 ---@return table Selection table
-function M.build(instruction, mode)
+function M.build(instruction, mode, include_buffers)
   local selection = visual.get_visual_selection()
   if not selection then
     error("No visual selection found.")
@@ -24,6 +25,15 @@ function M.build(instruction, mode)
     selection.end_row, selection.end_col
   )
 
+  local other_buffers_context = ""
+  if include_buffers then
+    other_buffers_context = string.format([[
+
+<other_visible_files_context>
+%s
+</other_visible_files_context>]], visual.get_open_buffers_context())
+  end
+
   local system_prompt
   if mode == "review" then
     system_prompt = [[
@@ -34,6 +44,7 @@ You will be provided with:
 - LSP hover information (types and docs) for tokens in the selection.
 - The user's specific review instruction.
 - The specific selection of code to review.
+- (Optional) Context from other visible files in the editor.
 
 IMPORTANT:
 - Return a helpful, concise code review using standard Markdown.
@@ -50,6 +61,7 @@ You will be provided with:
 - LSP hover information (types and docs) for tokens in the selection.
 - The user's specific rewrite instruction.
 - The specific selection of code to rewrite.
+- (Optional) Context from other visible files in the editor.
 
 IMPORTANT:
 - Return ONLY the raw code replacement.
@@ -74,12 +86,12 @@ IMPORTANT:
 
 <lsp_hover_types>
 %s
-</lsp_hover_types>
+</lsp_hover_types>%s
 
 <selection_to_process>
 %s
 </selection_to_process>
-]], instruction, buffer_content, diagnostics, hover_info, selection.text)
+]], instruction, buffer_content, diagnostics, hover_info, other_buffers_context, selection.text)
 
   return system_prompt, user_prompt, selection
 end

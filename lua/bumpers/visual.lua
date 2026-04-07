@@ -64,4 +64,47 @@ function M.get_buffer_context()
   return table.concat(lines, "\n")
 end
 
+---Gets the content of other visible buffers
+---@return string
+function M.get_open_buffers_context()
+  local current_bufnr = vim.api.nvim_get_current_buf()
+  local wins = vim.api.nvim_list_wins()
+  local seen_bufs = { [current_bufnr] = true }
+  local context_parts = {}
+
+  for _, win in ipairs(wins) do
+    local bufnr = vim.api.nvim_win_get_buf(win)
+    if not seen_bufs[bufnr] then
+      seen_bufs[bufnr] = true
+      
+      -- Ensure it's a normal file buffer
+      local buftype = vim.api.nvim_buf_get_option(bufnr, "buftype")
+      if buftype == "" then
+        local bufname = vim.api.nvim_buf_get_name(bufnr)
+        -- Fallback if buffer has no name
+        if bufname == "" then
+          bufname = "[No Name]"
+        else
+          -- Try to make it relative to cwd
+          local cwd = vim.fn.getcwd()
+          if vim.startswith(bufname, cwd) then
+            bufname = string.sub(bufname, string.len(cwd) + 2)
+          end
+        end
+
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+        local content = table.concat(lines, "\n")
+
+        table.insert(context_parts, string.format("File: %s\n```\n%s\n```", bufname, content))
+      end
+    end
+  end
+
+  if #context_parts == 0 then
+    return ""
+  end
+
+  return table.concat(context_parts, "\n\n")
+end
+
 return M

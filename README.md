@@ -77,3 +77,8 @@ vim.keymap.set("v", "<leader>bb", ":Bump<CR>", { desc = "Bumpers Rewrite" })
 If you prepend your instruction with `#review`, Bumpers will not rewrite your code. Instead, it will analyze your selection, file context, and LSP data to answer your question or perform a code review, displaying the result in a floating markdown popup window.
 - Example: `#review is this function thread safe?`
 - Example: `#review what does this do?`
+
+### Multi-File Context
+If you include the keyword `!buffers` anywhere in your instruction, Bumpers will read all other visible open files in your Neovim windows and send their contents to the LLM as additional context.
+- Example: `!buffers refactor this function to use the interface defined in the other file`
+- Example: `#review !buffers how does this interact with the state managed in the other visible split?`
