@@ -29,7 +29,8 @@ vim.opt.runtimepath:prepend("/Users/ike/code/personal/bumpers")
 -- 3. Set up your configuration
 require("bumpers").setup({
   provider = "anthropic",
-  model = "claude-opus-4-6", 
+  model = "claude-opus-4-6",
+  large_prompt_threshold = 100000,
   api_keys = {
     anthropic = function() return os.getenv("BUMPERS_API_KEY") end,
     gemini = function() return os.getenv("GEMINI_API_KEY") end,
@@ -60,6 +61,9 @@ vim.keymap.set("v", "<leader>bb", ":Bump<CR>", { desc = "Bumpers Rewrite" })
     
     -- How long to wait for synchronous LSP type queries (ms)
     lsp_timeout_ms = 1000,
+
+    -- What size of prompt (in characters) do you want to get warned on?
+    large_prompt_threshold = 100000,
   },
   keys = {
     { "<leader>bb", ":Bump<CR>", mode = "v", desc = "Bumpers Rewrite" }

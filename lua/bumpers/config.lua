@@ -9,6 +9,7 @@ M.options = {
     gemini = nil,
   },
   lsp_timeout_ms = 1000, -- Timeout for synchronous LSP hover requests
+  large_prompt_threshold = 100000, -- Warn if prompt size in characters exceeds this value
 }
 
 function M.setup(user_opts)

@@ -49,6 +49,17 @@ function M.run(cmd_opts)
         return
       end
 
+      local total_size = #system_prompt + #user_prompt
+      local threshold = config.get().large_prompt_threshold
+      if threshold and total_size > threshold then
+        local kb = math.floor(total_size / 1024)
+        local choice = vim.fn.confirm("Prompt size is " .. kb .. " KB (threshold: " .. math.floor(threshold / 1024) .. " KB). Send anyway?", "&Yes\n&No", 2)
+        if choice ~= 1 then
+          vim.notify("bumpers: Request aborted by user due to prompt size.", vim.log.levels.INFO)
+          return
+        end
+      end
+
       request.start(system_prompt, user_prompt, selection, mode)
     end)
   end)
