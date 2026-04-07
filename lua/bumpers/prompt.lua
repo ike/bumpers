@@ -4,10 +4,12 @@ local lsp = require("bumpers.lsp")
 local M = {}
 
 ---Assembles the prompt containing context, diagnostics, types, and the instruction
----@param instruction string The user's rewrite instruction
+---@param instruction string The user's rewrite or review instruction
+---@param mode string The mode, either "rewrite" or "review"
 ---@return string System prompt
 ---@return string User prompt
-function M.build(instruction)
+---@return table Selection table
+function M.build(instruction, mode)
   local selection = visual.get_visual_selection()
   if not selection then
     error("No visual selection found.")
@@ -22,7 +24,25 @@ function M.build(instruction)
     selection.end_row, selection.end_col
   )
 
-  local system_prompt = [[
+  local system_prompt
+  if mode == "review" then
+    system_prompt = [[
+You are an expert software engineer. Your task is to review the provided code snippet exactly as instructed.
+You will be provided with:
+- The full file context.
+- LSP diagnostics (errors/warnings) overlapping with the selection.
+- LSP hover information (types and docs) for tokens in the selection.
+- The user's specific review instruction.
+- The specific selection of code to review.
+
+IMPORTANT:
+- Return a helpful, concise code review using standard Markdown.
+- Focus directly on answering the user's instruction or questions.
+- If suggesting code, use standard Markdown code blocks.
+- Keep it relatively brief, as this will be displayed in a popup window.
+]]
+  else
+    system_prompt = [[
 You are an expert software engineer. Your task is to rewrite the provided code snippet exactly as instructed.
 You will be provided with:
 - The full file context.
@@ -37,6 +57,7 @@ IMPORTANT:
 - DO NOT explain the code or add conversation.
 - Output MUST be immediately drop-in ready to replace the selection.
 ]]
+  end
 
   local user_prompt = string.format([[
 <instruction>
@@ -55,9 +76,9 @@ IMPORTANT:
 %s
 </lsp_hover_types>
 
-<selection_to_rewrite>
+<selection_to_process>
 %s
-</selection_to_rewrite>
+</selection_to_process>
 ]], instruction, buffer_content, diagnostics, hover_info, selection.text)
 
   return system_prompt, user_prompt, selection

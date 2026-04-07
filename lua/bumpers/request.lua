@@ -133,8 +133,50 @@ local function format_headers(req)
   return headers_dict
 end
 
----Initiates the request and handles inline replacement
-function M.start(system_prompt, user_prompt, selection)
+---Displays text in a floating popup window
+---@param text string
+local function show_popup(text)
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_option(bufnr, "bufhidden", "wipe")
+  vim.api.nvim_buf_set_option(bufnr, "filetype", "markdown")
+  
+  local lines = vim.split(text, "\n", { plain = true })
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  
+  -- Calculate window size (80% of screen)
+  local ui = vim.api.nvim_list_uis()[1]
+  local width = math.floor(ui.width * 0.8)
+  local height = math.floor(ui.height * 0.8)
+  
+  -- Calculate position to center
+  local col = math.floor((ui.width - width) / 2)
+  local row = math.floor((ui.height - height) / 2)
+  
+  local opts = {
+    relative = "editor",
+    width = width,
+    height = height,
+    col = col,
+    row = row,
+    style = "minimal",
+    border = "rounded",
+    title = " Bumpers Review ",
+    title_pos = "center"
+  }
+  
+  local win = vim.api.nvim_open_win(bufnr, true, opts)
+  
+  -- Easy close mappings
+  vim.api.nvim_buf_set_keymap(bufnr, "n", "q", "<cmd>close<CR>", { noremap = true, silent = true })
+  vim.api.nvim_buf_set_keymap(bufnr, "n", "<Esc>", "<cmd>close<CR>", { noremap = true, silent = true })
+end
+
+---Initiates the request and handles inline replacement or review
+---@param system_prompt string
+---@param user_prompt string
+---@param selection BumpersSelection
+---@param mode string "rewrite" or "review"
+function M.start(system_prompt, user_prompt, selection, mode)
   local opts = config.get()
   
   local api_key_val = get_api_key(opts)
@@ -163,10 +205,13 @@ function M.start(system_prompt, user_prompt, selection)
   local bufnr = vim.api.nvim_get_current_buf()
   local log_file, log_content = setup_logging(opts.model, opts.provider, system_prompt, user_prompt)
 
-  local extmark_id, ns_id = setup_insertion_extmark(bufnr, selection)
-  if not extmark_id then
-    vim.notify("bumpers: Failed to create insertion extmark.", vim.log.levels.ERROR)
-    return
+  local extmark_id, ns_id
+  if mode == "rewrite" then
+    extmark_id, ns_id = setup_insertion_extmark(bufnr, selection)
+    if not extmark_id then
+      vim.notify("bumpers: Failed to create insertion extmark.", vim.log.levels.ERROR)
+      return
+    end
   end
 
   local headers_dict = format_headers(req)
@@ -182,7 +227,9 @@ function M.start(system_prompt, user_prompt, selection)
           err_msg = err_msg .. " - " .. vim.inspect(res.body)
         end
         vim.notify(err_msg, vim.log.levels.ERROR)
-        vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
+        if mode == "rewrite" and extmark_id then
+          vim.api.nvim_buf_del_extmark(bufnr, ns_id, extmark_id)
+        end
         return
       end
 
@@ -193,7 +240,11 @@ function M.start(system_prompt, user_prompt, selection)
           table.insert(log_content, full_text)
           vim.fn.writefile(vim.split(table.concat(log_content, "\n"), "\n", {plain=true}), log_file)
           
-          insert_text(bufnr, ns_id, extmark_id, full_text)
+          if mode == "review" then
+            show_popup(full_text)
+          else
+            insert_text(bufnr, ns_id, extmark_id, full_text)
+          end
         else
           vim.notify("bumpers: No text extracted from LLM response body.", vim.log.levels.WARN)
         end
@@ -201,7 +252,11 @@ function M.start(system_prompt, user_prompt, selection)
         vim.notify("bumpers: No body payload returned from LLM.", vim.log.levels.WARN)
       end
 
-      vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
+      if mode == "rewrite" then
+        vim.notify("bumpers: Rewrite complete.", vim.log.levels.INFO)
+      else
+        vim.notify("bumpers: Review complete.", vim.log.levels.INFO)
+      end
     end)
   })
 end

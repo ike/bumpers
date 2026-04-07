@@ -72,3 +72,8 @@ vim.keymap.set("v", "<leader>bb", ":Bump<CR>", { desc = "Bumpers Rewrite" })
 2. Run `:Bump` (or your mapped keybinding like `<leader>bb`).
 3. Type an instruction like *"Refactor to use async/await"* or *"Fix these LSP errors"*.
 4. Watch the code rewrite itself directly in your buffer!
+
+### Review Mode
+If you prepend your instruction with `#review`, Bumpers will not rewrite your code. Instead, it will analyze your selection, file context, and LSP data to answer your question or perform a code review, displaying the result in a floating markdown popup window.
+- Example: `#review is this function thread safe?`
+- Example: `#review what does this do?`

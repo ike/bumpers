@@ -29,13 +29,20 @@ function M.run(cmd_opts)
     
     -- Defer to next tick so vim.ui window closes properly and visual marks update
     vim.schedule(function()
-      local ok, system_prompt, user_prompt, selection = pcall(prompt.build, instruction)
+      local mode = "rewrite"
+      local actual_instruction = instruction
+      if instruction:match("^#review") then
+        mode = "review"
+        actual_instruction = instruction:gsub("^#review%s*", "")
+      end
+
+      local ok, system_prompt, user_prompt, selection = pcall(prompt.build, actual_instruction, mode)
       if not ok then
         vim.notify("bumpers: Error building prompt: " .. tostring(system_prompt), vim.log.levels.ERROR)
         return
       end
 
-      request.start(system_prompt, user_prompt, selection)
+      request.start(system_prompt, user_prompt, selection, mode)
     end)
   end)
 end
