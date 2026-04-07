@@ -4,7 +4,7 @@ Bumpers is a Neovim plugin that intelligently rewrites your visually selected co
 
 ## Features
 - **LSP Context**: Grabs relevant diagnostics (errors, warnings) and hover type information for symbols directly inside your selection to feed the LLM accurate context.
-- **Streamed Replacement**: Code is streamed in real-time right into your buffer.
+- **Protects Common Secrets**: Automatically detects and redacts common API keys, certificates, and high-entropy strings from your code and instructions before sending anything to the LLM.
 - **Single-Step Undo**: Using `undojoin`, standard Vim undo (`u`) reverts the entire LLM generation at once.
 - **Config-Driven**: Define your API keys and default models in your `setup()` without disruptive UI prompts.
 
