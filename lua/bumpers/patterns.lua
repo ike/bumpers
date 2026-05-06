@@ -39,11 +39,11 @@ M.secrets = {
   -- Azure Connection String
   "DefaultEndpointsProtocol=https;AccountName=[^;]\\+;AccountKey=[^;]\\+",
   -- Cloudflare API Token
-  "[Cc]loudflare.*[0-9a-zA-Z_\\-]\\{40\\}",
+  "[Cc]loudflare[^\\r\\n]\\{-}[0-9a-zA-Z_\\-]\\{40\\}",
   -- Twilio Account SID
   "AC[0-9a-f]\\{32\\}",
   -- Twilio Auth Token (prefixed context to reduce false positives)
-  "twilio.*[0-9a-f]\\{32\\}",
+  "twilio[^\\r\\n]\\{-}[0-9a-f]\\{32\\}",
   -- SendGrid API Key
   "SG\\.[0-9A-Za-z\\-_]\\{22\\}\\.[0-9A-Za-z\\-_]\\{43\\}",
   -- Mailgun API Key
@@ -123,7 +123,7 @@ M.secrets = {
   -- PostgreSQL connection string (URI style)
   "postgres\\(ql\\)\\?://[^:@]\\+:[^@]\\+@[^/]\\+/\\S\\+",
   -- PostgreSQL connection string (keyword/value style)
-  "host=[^[:space:]]\\+\\s\\+.*password=[^[:space:]]\\+",
+  "host=[^[:space:]]\\+\\s\\+[^\\r\\n]\\{-}password=[^[:space:]]\\+",
   -- MySQL connection string (URI style)
   "mysql://[^:@]\\+:[^@]\\+@[^/]\\+/\\S\\+",
   -- Redis connection string (with password)
