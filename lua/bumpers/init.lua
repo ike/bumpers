@@ -1,4 +1,5 @@
 local config = require("bumpers.config")
+local name = "bumpers"
 
 local M = {}
 
@@ -36,6 +37,12 @@ function M.run(cmd_opts)
       if actual_instruction:match("!buffers") then
         include_buffers = true
         actual_instruction = actual_instruction:gsub("!buffers%s*", "")
+      end
+
+      if actual_instruction:match("^#lastreview") then
+        local request = require("bumpers.request")
+        request.show_last_review()
+        return
       end
 
       if actual_instruction:match("^#review") then

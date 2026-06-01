@@ -2,6 +2,7 @@ local curl = require("plenary.curl")
 local config = require("bumpers.config")
 
 local M = {}
+local last_review_text = nil
 
 ---@class BumpersSelection
 ---@field start_row number 1-indexed
@@ -139,19 +140,19 @@ local function show_popup(text)
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_option(bufnr, "bufhidden", "wipe")
   vim.api.nvim_buf_set_option(bufnr, "filetype", "markdown")
-  
+
   local lines = vim.split(text, "\n", { plain = true })
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  
+
   -- Calculate window size (80% of screen)
   local ui = vim.api.nvim_list_uis()[1]
   local width = math.floor(ui.width * 0.8)
   local height = math.floor(ui.height * 0.8)
-  
+
   -- Calculate position to center
   local col = math.floor((ui.width - width) / 2)
   local row = math.floor((ui.height - height) / 2)
-  
+
   local opts = {
     relative = "editor",
     width = width,
@@ -163,9 +164,12 @@ local function show_popup(text)
     title = " Bumpers Review ",
     title_pos = "center"
   }
-  
-  local win = vim.api.nvim_open_win(bufnr, true, opts)
-  
+
+  vim.api.nvim_open_win(bufnr, true, opts)
+
+  vim.api.nvim_buf_set_option(bufnr, "wrap", true)
+  vim.api.nvim_win_set_option(0, "wrap", true)
+
   -- Easy close mappings
   vim.api.nvim_buf_set_keymap(bufnr, "n", "q", "<cmd>close<CR>", { noremap = true, silent = true })
   vim.api.nvim_buf_set_keymap(bufnr, "n", "<Esc>", "<cmd>close<CR>", { noremap = true, silent = true })
@@ -241,6 +245,7 @@ function M.start(system_prompt, user_prompt, selection, mode)
           vim.fn.writefile(vim.split(table.concat(log_content, "\n"), "\n", {plain=true}), log_file)
           
           if mode == "review" then
+            last_review_text = full_text
             show_popup(full_text)
           else
             insert_text(bufnr, ns_id, extmark_id, full_text)
@@ -260,5 +265,14 @@ function M.start(system_prompt, user_prompt, selection, mode)
     end)
   })
 end
+
+function M.show_last_review()
+  if not last_review_text then
+    vim.notify("bumpers: No review has been run yet.", vim.log.levels.WARN)
+    return
+  end
+  show_popup(last_review_text)
+end
+
 
 return M

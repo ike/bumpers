@@ -69,14 +69,11 @@ IMPORTANT:
 - DO NOT wrap the response in markdown blocks (e.g., no ```lua ... ```).
 - DO NOT explain the code or add conversation.
 - Output MUST be immediately drop-in ready to replace the selection.
+- DO NOT explain anything about your thought process or narrate anything ONLY respond with raw code replacement.
 ]]
   end
 
   local user_prompt = string.format([[
-<instruction>
-%s
-</instruction>
-
 <file_context>
 %s
 </file_context>
@@ -92,13 +89,17 @@ IMPORTANT:
 <selection_to_process>
 %s
 </selection_to_process>
-]], 
-  secrets.obfuscate(instruction), 
-  secrets.obfuscate(buffer_content), 
-  secrets.obfuscate(diagnostics), 
-  secrets.obfuscate(hover_info), 
-  secrets.obfuscate(other_buffers_context), 
-  secrets.obfuscate(selection.text))
+
+<instruction>
+%s
+</instruction>
+]],
+  secrets.obfuscate(buffer_content),
+  secrets.obfuscate(diagnostics),
+  secrets.obfuscate(hover_info),
+  secrets.obfuscate(other_buffers_context),
+  secrets.obfuscate(selection.text),
+  secrets.obfuscate(instruction))
 
   return system_prompt, user_prompt, selection
 end
