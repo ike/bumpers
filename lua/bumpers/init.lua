@@ -24,30 +24,52 @@ local function get_multiline_input(callback)
     title = " Rewrite instruction (submit: <C-CR> or :w) ",
   })
 
+  -- Give the buffer a name so :w doesn't complain about "no file name"
+  vim.api.nvim_buf_set_name(buf, "bumpers://instruction")
   vim.bo[buf].buftype = "acwrite"
   vim.bo[buf].filetype = "markdown"
 
+  local submitted = false
+
   local function submit()
+    if submitted then return end
+    submitted = true
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    vim.api.nvim_win_close(win, true)
-    vim.api.nvim_buf_delete(buf, { force = true })
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
     local text = table.concat(lines, "\n")
     callback(text)
   end
 
-  vim.keymap.set("n", "<C-CR>", submit, { buffer = buf })
-  vim.keymap.set("i", "<C-CR>", submit, { buffer = buf })
+  -- Use <C-s> as an alternative since <C-CR> may not be recognized by all terminals
+  vim.keymap.set("n", "<C-CR>", submit, { buffer = buf, noremap = true })
+  vim.keymap.set("i", "<C-CR>", submit, { buffer = buf, noremap = true })
+  vim.keymap.set("n", "<C-s>", submit, { buffer = buf, noremap = true })
+  vim.keymap.set("i", "<C-s>", submit, { buffer = buf, noremap = true })
   vim.keymap.set("n", "q", function()
-    vim.api.nvim_win_close(win, true)
-    vim.api.nvim_buf_delete(buf, { force = true })
+    if submitted then return end
+    submitted = true
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
     callback(nil)
-  end, { buffer = buf })
+  end, { buffer = buf, noremap = true })
 
-  -- Also support :w to submit
+  -- Support :w to submit via BufWriteCmd
   vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = buf,
-    once = true,
-    callback = function() submit() end,
+    callback = function()
+      -- Mark buffer as not modified so vim doesn't complain
+      vim.bo[buf].modified = false
+      submit()
+    end,
   })
 
   vim.cmd("startinsert")
